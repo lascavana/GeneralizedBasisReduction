@@ -1,6 +1,8 @@
 #include <limits>
 #include <vector>
+#include <cassert>
 #include <sstream>
+#include <fstream>
 #include <iostream>
 
 
@@ -11,6 +13,66 @@ using namespace std;
 using matrix = vector<vector<double>>;
 
 string itos(int i) {stringstream s; s << i; return s.str(); }
+
+void read_constraints
+(
+  const char *filename,
+  matrix &A,
+  vector<double> &b,
+  vector<double> &lb,
+  vector<double> &ub
+)
+{
+  int n, m; double coeff; string str;
+
+  /* open file for reading */
+  ifstream input_file(filename, ifstream::in);
+
+  /* read data */
+  if (input_file.is_open())
+  {
+    input_file >> n >> m;
+
+    /* read A matrix */
+    for (int i = 0; i < m; i++)
+  	{
+        vector<double> row(n);
+  	    for (int j = 0; j < n; j++)
+          input_file >> row[j];
+        A.push_back( row );
+    }
+
+    /* read rhs vector b */
+    for (int i = 0; i < m; i++)
+    {
+      input_file >> coeff;
+      b.push_back( coeff );
+    }
+
+    /* read variable lower bounds */
+    for (int j = 0; j < n; j++)
+    {
+      input_file >> str;
+      if (str == "-inf")
+        lb.push_back( -numeric_limits<double>::max() );
+      else
+        lb.push_back( stod(str) );
+    }
+
+    /* read variable upper bounds */
+    for (int j = 0; j < n; j++)
+    {
+      input_file >> str;
+      if (str == "inf")
+        ub.push_back( numeric_limits<double>::max() );
+      else
+        ub.push_back( stod(str) );
+    }
+
+    input_file.close();
+  }
+  else cerr << "Unable to open file" << endl;
+}
 
 class Polytope
 {
@@ -192,38 +254,40 @@ public:
 /** main function for queens example */
 int
 main(
-     int args,
+     int argc,
      char ** argv
      )
 {
+  if (argc < 2)
+  {
+    cout << "No file provided. Usage: reduce <inputfile>";
+    return 0;
+  }
 
   /* get problem data */
-  int n = 2;
-  int m = 3;
+  matrix A;
+  vector<double> b;
+  vector<double> lb;
+  vector<double> ub;
+  read_constraints(argv[1], A, b, lb, ub);
+  int m = A.size();
+  int n = lb.size();
+
+  /* parameters */
   double eps = 1/4;
-  matrix A(m, vector<double>(n));
-  vector<double> b(m);
-  vector<double> lb(n);
-  vector<double> ub(n);
-
-
-  A = { {-1, -7}, {2, 7}, {-5, 4} };
-  b = { -7, 14, 4 };
-  lb = {0,0};
-  ub = {numeric_limits<double>::max(), numeric_limits<double>::max()};
 
   /* initialize polytope */
   Polytope P(A, b, lb, ub);
-
 
   double h, alpha, beta;
   vector<double> F(n+1, -1);
   double* prev_alpha = nullptr;
 
+  /* reduction loop */
   int i = 1;
   while (i < n)
   {
-    cout << "i: " << i << endl;
+    cout << "*** i = " << i << endl;
     /* get F[i] */
     if ( F[i] < 0 )
       F[i] = P.distance(i, i, nullptr, nullptr);
@@ -236,9 +300,9 @@ main(
       h = F[i+1]; alpha = *prev_alpha;
       prev_alpha = nullptr;
     }
-    cout << "F" << i << "(b" << i << ")= " << F[i] << endl;
-    cout << "F" << i+1 << "(b" << i+1 << ")= " << h << endl;
-    cout << "alpha= " << alpha << endl;
+    cout << "   F" << i << "(b" << i << ") = " << F[i] << endl;
+    cout << "   F" << i+1 << "(b" << i+1 << ") = " << h << endl;
+    cout << "   alpha = " << alpha << endl;
 
     /* get mu */
     double mu, fpp;
@@ -268,7 +332,7 @@ main(
 
     }
 
-    cout << "mu= " << mu << endl;
+    cout << "   mu = " << mu << endl;
 
     /* update b^{i+1} */
     for( int j = 0; j < n; ++j )
@@ -277,7 +341,7 @@ main(
     /* do basis check */
     if ( fpp < (1-eps)*F[i] )
     {
-      cout << "back" << endl;
+      cout << "   condition not satisfied. i--" << endl;
       /* interchange b^i and b^{i+1} */
       vector<double> tempcopy = P.basis[i];
       for( int j = 0; j < n; ++j )
@@ -298,20 +362,21 @@ main(
     }
     else
     {
-      cout << "forward" << endl;
+      cout << "   condition satisfied. i++" << endl;
       F[i+1] = h;
       i++;
     }
 
-    for( int i = 0; i < n; ++i )
-    {
-      for( int j = 0; j < n; ++j )
-      {
-        cout << P.basis[i][j] << " ";
-      }
-      cout << endl;
-    }
+  }
 
+  /* print basis */
+  cout << "Reduction finished. Reduced basis is: " << endl;
+  for( int i = 0; i < n; ++i )
+  {
+    cout << "b" << i+1 << " = [";
+    for( int j = 0; j < n; ++j )
+      cout << P.basis[i][j] << " ";
+    cout << "]" << endl;
   }
 
 }
