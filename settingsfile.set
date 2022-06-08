@@ -1,0 +1,10 @@
+propagating/maxrounds = 0
+propagating/maxroundsroot = 0
+presolving/maxrestarts = 0
+presolving/maxrounds = 0
+separating/maxroundsroot = 0
+separating/maxrounds = 0
+conflict/enable =  FALSE
+reoptimization/strongbranchinginit = FALSE
+randomization/randomseedshift = 0
+randomization/permutationseed = 0
