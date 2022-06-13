@@ -13,7 +13,11 @@ b
 lb
 ub
 ```
-where n is the number of variables, m is the number of constraints, A is the constraint matrix (m x n), b is the right-hand side (m), and lb and ub are the vectors containing the variable lower and upper bounds, respectively, (n).
+where n is the number of variables, m is the number of constraints, A is the constraint matrix (m x n), b is the right-hand side (m), and lb and ub are the vectors containing the variable lower and upper bounds, respectively, (n). The coefficients of lb and ub can be numbers, ```inf``` or ```-inf``` (see ```example.txt```).
 
 ### Instructions
-This repository provides a shell script to compile and run the program. Modify the filename in this script (```run.sh```).
+This repository provides a shell script to compile and run the program. Modify the filename in this script (```run.sh```) and then run
+```
+sh run.sh
+```
+
