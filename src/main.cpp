@@ -96,15 +96,17 @@ class Polytope
     for( int j = 0; j < n; ++j )
     {
       GRBVar xvar, yvar;
+      string xname = "X" + to_string(j);
+      string yname = "Y" + to_string(j);
       if (ub[j] < numeric_limits<double>::max())
       {
-        xvar = model.addVar(lb[j], ub[j], 0.0, GRB_CONTINUOUS, "X");
-        yvar = model.addVar(lb[j], ub[j], 0.0, GRB_CONTINUOUS, "Y");
+        xvar = model.addVar(lb[j], ub[j], 0.0, GRB_CONTINUOUS, xname);
+        yvar = model.addVar(lb[j], ub[j], 0.0, GRB_CONTINUOUS, yname);
       }
       else
       {
-        xvar = model.addVar(lb[j], GRB_INFINITY, 0.0, GRB_CONTINUOUS, "X");
-        yvar = model.addVar(lb[j], GRB_INFINITY, 0.0, GRB_CONTINUOUS, "Y");
+        xvar = model.addVar(lb[j], GRB_INFINITY, 0.0, GRB_CONTINUOUS, xname);
+        yvar = model.addVar(lb[j], GRB_INFINITY, 0.0, GRB_CONTINUOUS, yname);
       }
       xvars.push_back( xvar );
       yvars.push_back( yvar );
@@ -321,6 +323,8 @@ main(
       }
       double h1 = P.distance(vec1, i, nullptr, &beta1);
       double h2 = P.distance(vec2, i, nullptr, &beta2);
+      // cout << "F" << i << "(b_{i+1}+ceil(alpha)*b_{i}) = " << h1 <<endl;
+      // cout << "F" << i << "(b_{i+1}+floor(alpha)*b_{i}) = " << h2 <<endl;
       if (h1<h2)
       {
         mu = ceil(alpha); fpp = h1; beta = beta1;
@@ -353,6 +357,10 @@ main(
       /* update F[i] */
       F[i] = fpp;
 
+      /* forget F[i+1] if saved */
+      F[i+1] = -1;
+      assert(F[i+2]==-1);
+
       /* save correct dual variable */
       prev_alpha = &beta;
 
@@ -370,6 +378,7 @@ main(
   }
 
   /* print basis */
+  cout << endl;
   cout << "Reduction finished. Reduced basis is: " << endl;
   for( int i = 0; i < n; ++i )
   {
@@ -377,6 +386,20 @@ main(
     for( int j = 0; j < n; ++j )
       cout << P.basis[i][j] << " ";
     cout << "]" << endl;
+  }
+
+  /* check basis */
+  cout << endl;
+  for( int i = 1; i < n; ++i )
+  {
+    double Fii = P.distance(i, i, nullptr, nullptr);
+    double Fiipp = P.distance(i, i+1, nullptr, nullptr);
+    cout << "Condition ";
+    cout << Fiipp << " >= " << (1.0-eps)*Fii;
+    if ((1.0-eps)*Fii <= Fiipp)
+      cout << " satisfied " << endl;
+    else
+      cout << " not satisfied " << endl;
   }
 
 }
