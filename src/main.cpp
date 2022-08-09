@@ -136,6 +136,7 @@ class Polytope
   }
 
 public:
+  int nvars;
   matrix basis;
 
   Polytope(const matrix &A, const vector<double> &b,
@@ -145,9 +146,9 @@ public:
     initialize(A, b, lb, ub);
 
     /* initialize basis to standard Zn basis */
-    int n = lb.size();
-    vector<double> zeros(n);
-    for( int j = 0; j < n; ++j )
+    nvars = lb.size();
+    vector<double> zeros(nvars);
+    for( int j = 0; j < nvars; ++j )
     {
       basis.push_back(zeros);
       basis[j][j] = 1;
@@ -161,7 +162,8 @@ public:
     yvars.clear();
   }
 
-  double distance(vector<double> w, int k, double* alpha, double* beta)
+  double distance(int k, const vector<double> &w)
+  /* calculates F_{k}(w) for k \in {1,...,n}. */
   {
     int n = xvars.size();
     assert(w.size() == n);
@@ -190,12 +192,51 @@ public:
     /* get solution */
     double bestsol = model.get(GRB_DoubleAttr_ObjVal);
 
-    /* get dual variables for last two constraints */
+    /* release transformed problem and added constraints */
     for(int i = 0; i < added_conss.size(); ++i)
-    if ( k > 1 && alpha != nullptr)
-      *alpha = -added_conss[k-2].get(GRB_DoubleAttr_Pi);
-    if ( k > 2 && beta != nullptr)
-      *beta = -added_conss[k-3].get(GRB_DoubleAttr_Pi);
+      model.remove(added_conss[i]);
+    added_conss.clear();
+
+    return bestsol;
+  }
+
+  double distance(int k, const vector<double> &w, vector<double> &alpha)
+  /* calculates F_{k}(w) for k \in {1,...,n}. Also returns the dual
+  variables alpha_1, ..., alpha_{k-1}. */
+  {
+    int n = xvars.size();
+    assert(w.size() == n);
+
+    /* change objective function */
+    GRBLinExpr obj = 0;
+    for( int j = 0; j < n; ++j )
+      obj+=w[j]*xvars[j] - w[j]*yvars[j];
+    model.setObjective(obj, GRB_MAXIMIZE);
+
+    /* add new rows */
+    vector<GRBConstr> added_conss;
+    for( int i = 1; i < k; ++i )
+    {
+       GRBLinExpr expr;
+       for( int j = 0; j < n; ++j )
+         expr += basis[i-1][j]*xvars[j] - basis[i-1][j]*yvars[j];
+       string name = "N_" + itos(i);
+       GRBConstr cons = model.addConstr(expr, GRB_EQUAL, 0.0, name);
+       added_conss.push_back(cons);
+    }
+
+    /* solve */
+    model.optimize();
+
+    /* get solution */
+    double bestsol = model.get(GRB_DoubleAttr_ObjVal);
+
+    /* get dual variables for the added constraints */
+    alpha.clear();
+    for(int i = 0; i < added_conss.size(); ++i)
+    {
+      alpha.push_back( -added_conss[i].get(GRB_DoubleAttr_Pi) );
+    }
 
     /* release transformed problem and added constraints */
     for(int i = 0; i < added_conss.size(); ++i)
@@ -205,10 +246,8 @@ public:
     return bestsol;
   }
 
-  double distance(int k, int p, double* alpha, double* beta)
-  /* calculates F_{k}(b^p) for k,p \in {1,...,n}. If k>=2, returns
-  the dual vairable associated with b^{p-1} (alpha), and furthermore,
-  if k>=3, returns the dual vairable associated with b^{p-2} (beta). */
+  double distance(int k, int p)
+  /* calculates F_{k}(b^p) for k,p \in {1,...,n}. */
   {
     int n = xvars.size();
 
@@ -236,11 +275,50 @@ public:
     /* get solution */
     double bestsol = model.get(GRB_DoubleAttr_ObjVal);
 
-    /* get dual variables for last two constraints */
-    if ( k > 1 && alpha != nullptr)
-      *alpha = -added_conss[k-2].get(GRB_DoubleAttr_Pi);
-    if ( k > 2 && beta != nullptr)
-      *beta = -added_conss[k-3].get(GRB_DoubleAttr_Pi);
+    /* release transformed problem and added constraints */
+    for(int i = 0; i < added_conss.size(); ++i)
+      model.remove(added_conss[i]);
+    added_conss.clear();
+
+    return bestsol;
+  }
+
+  double distance(int k, int p, vector<double> &alpha)
+  /* calculates F_{k}(b^p) for k,p \in {1,...,n}. Also returns the dual
+  variables alpha_1, ..., alpha_{k-1}. */
+  {
+    int n = xvars.size();
+
+    /* change objective function */
+    GRBLinExpr obj;
+    for( int j = 0; j < n; ++j )
+      obj += basis[p-1][j]*xvars[j] - basis[p-1][j]*yvars[j];
+    model.setObjective(obj, GRB_MAXIMIZE);
+
+    /* add new rows */
+    vector<GRBConstr> added_conss;
+    for( int i = 1; i < k; ++i )
+    {
+       GRBLinExpr expr;
+       for( int j = 0; j < n; ++j )
+         expr += basis[i-1][j]*xvars[j] -basis[i-1][j]*yvars[j];
+       string name = "N_" + itos(i);
+       GRBConstr cons = model.addConstr(expr, GRB_EQUAL, 0.0, name);
+       added_conss.push_back(cons);
+    }
+
+    /* solve */
+    model.optimize();
+
+    /* get solution */
+    double bestsol = model.get(GRB_DoubleAttr_ObjVal);
+
+    /* get dual variables for the added constraints */
+    alpha.clear();
+    for(int i = 0; i < added_conss.size(); ++i)
+    {
+      alpha.push_back( -added_conss[i].get(GRB_DoubleAttr_Pi) );
+    }
 
     /* release transformed problem and added constraints */
     for(int i = 0; i < added_conss.size(); ++i)
@@ -252,6 +330,90 @@ public:
 
 };
 
+
+void reduce
+(
+  double eps,
+  Polytope &P
+)
+{
+  double z, mu;
+  double f, fpp;
+  vector<double> alphas;
+
+  int i = 1;
+  int n = P.nvars;
+  while (i < n)
+  {
+    cout << "*** i = " << i << endl;
+
+    /* get F_i(b^i) */
+    f = P.distance(i,i);
+
+    /* get mu and fpp*/
+    z = P.distance(i+1, i+1, alphas);
+    double alpha = alphas.back(); 
+    cout << "   F" << i << "(b" << i << ") = " << f << endl;
+    cout << "   F" << i+1 << "(b" << i+1 << ") = " << z << endl;
+    cout << "   alpha = " << alpha << endl;
+
+    if ( trunc(alpha) == alpha )
+    {
+      mu = alpha; fpp = z;
+    }
+    else
+    {
+      vector<double> vec1(n), vec2(n);
+      for( int j = 0; j < n; ++j )
+      {
+        vec1[j] = P.basis[i][j] + ceil(alpha)*P.basis[i-1][j];
+        vec2[j] = P.basis[i][j] + floor(alpha)*P.basis[i-1][j];
+      }
+      double z_ceil = P.distance(i, vec1);
+      double z_floor = P.distance(i, vec2);
+      if (z_ceil < z_floor)
+      {
+        mu = ceil(alpha); fpp = z_ceil;
+      }
+      else
+      {
+        mu = floor(alpha); fpp = z_floor;
+      }
+
+    }
+
+    cout << "   mu = " << mu << endl;
+
+    /* update b^{i+1} */
+    for( int j = 0; j < n; ++j )
+      P.basis[i][j] = P.basis[i][j] + mu*P.basis[i-1][j];
+
+    /* do basis check */
+    if ( fpp < (1-eps)*f )
+    {
+      cout << "   condition not satisfied. i--" << endl;
+
+      /* interchange b^i and b^{i+1} */
+      vector<double> tempcopy = P.basis[i];
+      for( int j = 0; j < n; ++j )
+      {
+        P.basis[i][j] = P.basis[i-1][j];
+        P.basis[i-1][j] = tempcopy[j];
+      }
+
+      /* go back a step */
+      i = max(1,i-1);
+
+    }
+    else
+    {
+      cout << "   condition satisfied. i++" << endl;
+      i++;
+    }
+
+  }
+
+}
 
 
 /** main function for queens example */
@@ -282,101 +444,8 @@ main(
   /* initialize polytope */
   Polytope P(A, b, lb, ub);
 
-  double h, alpha, beta;
-  vector<double> F(n+1, -1);
-  double* prev_alpha = nullptr;
-
-  /* reduction loop */
-  int i = 1;
-  while (i < n)
-  {
-    cout << "*** i = " << i << endl;
-    /* get F[i] */
-    if ( F[i] < 0 )
-      F[i] = P.distance(i, i, nullptr, nullptr);
-
-    /* get F[i+1] */
-    if ( F[i+1] < 0 || prev_alpha == nullptr)
-      h = P.distance(i+1, i+1, &alpha, &beta);
-    else
-    {
-      h = F[i+1]; alpha = *prev_alpha;
-      prev_alpha = nullptr;
-    }
-    cout << "   F" << i << "(b" << i << ") = " << F[i] << endl;
-    cout << "   F" << i+1 << "(b" << i+1 << ") = " << h << endl;
-    cout << "   alpha = " << alpha << endl;
-
-    /* get mu */
-    double mu, fpp;
-    if ( trunc(alpha) == alpha )
-    {
-      mu = alpha; fpp = h;
-    }
-    else
-    {
-      double beta1, beta2;
-      vector<double> vec1(n), vec2(n);
-      for( int j = 0; j < n; ++j )
-      {
-        vec1[j] = P.basis[i][j] + ceil(alpha)*P.basis[i-1][j];
-        vec2[j] = P.basis[i][j] + floor(alpha)*P.basis[i-1][j];
-      }
-      double h1 = P.distance(vec1, i, nullptr, &beta1);
-      double h2 = P.distance(vec2, i, nullptr, &beta2);
-      // cout << "F" << i << "(b_{i+1}+ceil(alpha)*b_{i}) = " << h1 <<endl;
-      // cout << "F" << i << "(b_{i+1}+floor(alpha)*b_{i}) = " << h2 <<endl;
-      if (h1<h2)
-      {
-        mu = ceil(alpha); fpp = h1; beta = beta1;
-      }
-      else
-      {
-        mu = floor(alpha); fpp = h2; beta = beta2;
-      }
-
-    }
-
-    cout << "   mu = " << mu << endl;
-
-    /* update b^{i+1} */
-    for( int j = 0; j < n; ++j )
-      P.basis[i][j] = P.basis[i][j] + mu*P.basis[i-1][j];
-
-    /* do basis check */
-    if ( fpp < (1-eps)*F[i] )
-    {
-      cout << "   condition not satisfied. i--" << endl;
-      /* interchange b^i and b^{i+1} */
-      vector<double> tempcopy = P.basis[i];
-      for( int j = 0; j < n; ++j )
-      {
-        P.basis[i][j] = P.basis[i-1][j];
-        P.basis[i-1][j] = tempcopy[j];
-      }
-
-      /* update F[i] */
-      F[i] = fpp;
-
-      /* forget F[i+1] if saved */
-      F[i+1] = -1;
-      assert(F[i+2]==-1);
-
-      /* save correct dual variable */
-      prev_alpha = &beta;
-
-      /* go back a step */
-      i = max(1,i-1);
-
-    }
-    else
-    {
-      cout << "   condition satisfied. i++" << endl;
-      F[i+1] = h;
-      i++;
-    }
-
-  }
+  /* reduce basis */
+  reduce(eps, P);
 
   /* print basis */
   cout << endl;
@@ -393,8 +462,8 @@ main(
   cout << endl;
   for( int i = 1; i < n; ++i )
   {
-    double Fii = P.distance(i, i, nullptr, nullptr);
-    double Fiipp = P.distance(i, i+1, nullptr, nullptr);
+    double Fii = P.distance(i, i);
+    double Fiipp = P.distance(i, i+1);
     cout << "Condition ";
     cout << Fiipp << " >= " << (1.0-eps)*Fii;
     if ((1.0-eps)*Fii <= Fiipp)
