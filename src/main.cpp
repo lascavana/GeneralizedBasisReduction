@@ -15,6 +15,18 @@ using matrix = vector<vector<double>>;
 
 string itos(int i) {stringstream s; s << i; return s.str(); }
 
+bool is_integer(double x)
+{
+  if (x-trunc(x) < 1e-9)
+  {
+    return True;
+  }
+  else
+  {
+    return False;
+  }
+}
+
 void read_constraints
 (
   const char *filename,
@@ -357,7 +369,7 @@ void reduce
     cout << "   F" << i+1 << "(b" << i+1 << ") = " << z << endl;
     cout << "   alpha = " << alpha << endl;
 
-    if ( trunc(alpha) == alpha )
+    if ( is_integer(alpha) )
     {
       mu = alpha; fpp = z;
     }
