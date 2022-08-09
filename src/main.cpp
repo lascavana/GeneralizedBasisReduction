@@ -17,13 +17,13 @@ string itos(int i) {stringstream s; s << i; return s.str(); }
 
 bool is_integer(double x)
 {
-  if (x-trunc(x) < 1e-9)
+  if (abs(x-trunc(x)) < 1e-9)
   {
-    return True;
+    return true;
   }
   else
   {
-    return False;
+    return false;
   }
 }
 
@@ -349,20 +349,21 @@ void reduce
   Polytope &P
 )
 {
+  int n = P.nvars;
+
   double z, mu;
   double f, fpp;
   vector<double> alphas;
 
   int i = 1;
-  int n = P.nvars;
   while (i < n)
   {
     cout << "*** i = " << i << endl;
 
-    /* get F_i(b^i) */
+    /* get f = F_i(b^i) */
     f = P.distance(i,i);
 
-    /* get mu and fpp*/
+    /* get mu and fpp */
     z = P.distance(i+1, i+1, alphas);
     double alpha = alphas.back(); 
     cout << "   F" << i << "(b" << i << ") = " << f << endl;
