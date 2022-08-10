@@ -351,9 +351,12 @@ void reduce
 {
   int n = P.nvars;
 
-  double z, mu;
-  double f, fpp;
+  double mu;
+  double f, fp;
   vector<double> alphas;
+
+  double fpp = -1;
+  vector<double> f_stored(n+1, -1);
 
   int i = 1;
   while (i < n)
@@ -361,36 +364,38 @@ void reduce
     cout << "*** i = " << i << endl;
 
     /* get f = F_i(b^i) */
-    f = P.distance(i,i);
+    f = (f_stored[i] > 0) ? f_stored[i] : P.distance(i,i);
 
-    /* get mu and fpp */
-    z = P.distance(i+1, i+1, alphas);
-    double alpha = alphas.back(); 
+    /* get fpp = F_{i+1}(b^{i+1}) */
+    fpp = (fpp > 0) ? fpp : P.distance(i+1, i+1, alphas);
+
     cout << "   F" << i << "(b" << i << ") = " << f << endl;
-    cout << "   F" << i+1 << "(b" << i+1 << ") = " << z << endl;
-    cout << "   alpha = " << alpha << endl;
+    cout << "   F" << i+1 << "(b" << i+1 << ") = " << fpp << endl;
 
+    /* get mu and fp */  
+    double alpha = alphas.back();  cout << "   alpha = " << alpha << endl;
     if ( is_integer(alpha) )
     {
-      mu = alpha; fpp = z;
+      mu = trunc(alpha); fp = fpp;
     }
     else
     {
       vector<double> vec1(n), vec2(n);
+      vector<double> alphas1, alphas2;
       for( int j = 0; j < n; ++j )
       {
         vec1[j] = P.basis[i][j] + ceil(alpha)*P.basis[i-1][j];
         vec2[j] = P.basis[i][j] + floor(alpha)*P.basis[i-1][j];
       }
-      double z_ceil = P.distance(i, vec1);
-      double z_floor = P.distance(i, vec2);
+      double z_ceil = P.distance(i, vec1, alphas1);
+      double z_floor = P.distance(i, vec2, alphas2);
       if (z_ceil < z_floor)
       {
-        mu = ceil(alpha); fpp = z_ceil;
+        mu = ceil(alpha); fp = z_ceil; alphas = alphas1;
       }
       else
       {
-        mu = floor(alpha); fpp = z_floor;
+        mu = floor(alpha); fp = z_floor; alphas = alphas2;
       }
 
     }
@@ -402,7 +407,7 @@ void reduce
       P.basis[i][j] = P.basis[i][j] + mu*P.basis[i-1][j];
 
     /* do basis check */
-    if ( fpp < (1-eps)*f )
+    if ( fp < (1-eps)*f )
     {
       cout << "   condition not satisfied. i--" << endl;
 
@@ -414,6 +419,15 @@ void reduce
         P.basis[i-1][j] = tempcopy[j];
       }
 
+      /* clear obsolete saved values */
+      f_stored[i] = -1;
+      f_stored[i+1] = -1;
+
+      /* save values for next iter */
+      fpp = fp;
+      alphas.resize(i-1);
+      if( i == 1 ) fpp = -1; // reusing not valid at i=1
+
       /* go back a step */
       i = max(1,i-1);
 
@@ -421,6 +435,13 @@ void reduce
     else
     {
       cout << "   condition satisfied. i++" << endl;
+      /* store useful values */
+      f_stored[i] = f;
+      f_stored[i+1] = fpp;
+
+      /* clear fpp */
+      fpp = -1;
+
       i++;
     }
 
