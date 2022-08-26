@@ -240,6 +240,10 @@ public:
     /* solve */
     model.optimize();
 
+    /* get status */
+    int status = model.get(GRB_IntAttr_Status);
+    assert(status == 2); // solution should be optimal
+
     /* get solution */
     double bestsol = model.get(GRB_DoubleAttr_ObjVal);
 
