@@ -201,6 +201,10 @@ public:
     /* solve */
     model.optimize();
 
+    /* get status */
+    int status = model.get(GRB_IntAttr_Status);
+    assert(status == 2); // solution should be optimal
+
     /* get solution */
     double bestsol = model.get(GRB_DoubleAttr_ObjVal);
 
@@ -209,7 +213,7 @@ public:
       model.remove(added_conss[i]);
     added_conss.clear();
 
-    return bestsol;
+    return max(0.0, bestsol);
   }
 
   double distance(int k, const vector<double> &w, vector<double> &alpha)
@@ -259,7 +263,7 @@ public:
       model.remove(added_conss[i]);
     added_conss.clear();
 
-    return bestsol;
+    return max(0.0, bestsol);
   }
 
   double distance(int k, int p)
@@ -288,6 +292,10 @@ public:
     /* solve */
     model.optimize();
 
+    /* get status */
+    int status = model.get(GRB_IntAttr_Status);
+    assert(status == 2); // solution should be optimal
+
     /* get solution */
     double bestsol = model.get(GRB_DoubleAttr_ObjVal);
 
@@ -296,7 +304,7 @@ public:
       model.remove(added_conss[i]);
     added_conss.clear();
 
-    return bestsol;
+    return max(0.0, bestsol);
   }
 
   double distance(int k, int p, vector<double> &alpha)
@@ -326,6 +334,10 @@ public:
     /* solve */
     model.optimize();
 
+    /* get status */
+    int status = model.get(GRB_IntAttr_Status);
+    assert(status == 2); // solution should be optimal
+
     /* get solution */
     double bestsol = model.get(GRB_DoubleAttr_ObjVal);
 
@@ -341,7 +353,7 @@ public:
       model.remove(added_conss[i]);
     added_conss.clear();
 
-    return bestsol;
+    return max(0.0, bestsol);
   }
 
 };
@@ -502,12 +514,12 @@ main(
   {
     double Fii = P.distance(i, i);
     double Fiipp = P.distance(i, i+1);
-    cout << "Condition ";
-    cout << Fiipp << " >= " << (1.0-eps)*Fii;
-    if ((1.0-eps)*Fii <= Fiipp)
-      cout << " satisfied " << endl;
-    else
-      cout << " not satisfied " << endl;
+    if ((1.0-eps)*Fii > Fiipp)
+    {
+      cout << "Condition " << Fiipp << " >= " << (1.0-eps)*Fii << " not satisfied " << endl;
+      assert(0);
+    }
+    
   }
 
 }
