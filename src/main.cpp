@@ -1,4 +1,5 @@
 #include <math.h>
+#include <chrono>
 #include <limits>
 #include <vector>
 #include <cassert>
@@ -6,7 +7,7 @@
 #include <fstream>
 #include <iostream>
 
-
+// gurobi
 #include "gurobi_c++.h"
 
 
@@ -361,8 +362,9 @@ public:
 
 void reduce
 (
+  Polytope &P,
   double eps,
-  Polytope &P
+  double tol
 )
 {
   int n = P.nvars;
@@ -377,19 +379,19 @@ void reduce
   int i = 1;
   while (i < n)
   {
-    cout << "*** i = " << i << endl;
+    //cout << "*** i = " << i << endl;
 
     /* get f = F_i(b^i) */
-    f = (f_stored[i] > 0) ? f_stored[i] : P.distance(i,i);
+    f = (f_stored[i] >= 0.0) ? f_stored[i] : P.distance(i,i);
 
     /* get fpp = F_{i+1}(b^{i+1}) */
-    fpp = (fpp > 0) ? fpp : P.distance(i+1, i+1, alphas);
+    fpp = (fpp >= 0.0) ? fpp : P.distance(i+1, i+1, alphas);
 
-    cout << "   F" << i << "(b" << i << ") = " << f << endl;
-    cout << "   F" << i+1 << "(b" << i+1 << ") = " << fpp << endl;
+    // cout << "   F" << i << "(b" << i << ") = " << f << endl;
+    // cout << "   F" << i+1 << "(b" << i+1 << ") = " << fpp << endl;
 
     /* get mu and fp */  
-    double alpha = alphas.back();  cout << "   alpha = " << alpha << endl;
+    double alpha = alphas.back();  
     if ( is_integer(alpha) )
     {
       mu = trunc(alpha); fp = fpp;
@@ -416,16 +418,17 @@ void reduce
 
     }
 
-    cout << "   mu = " << mu << endl;
+    //cout << "   alpha = " << alpha << endl;
+    //cout << "   mu = " << mu << endl;
 
     /* update b^{i+1} */
     for( int j = 0; j < n; ++j )
       P.basis[i][j] = P.basis[i][j] + mu*P.basis[i-1][j];
 
     /* do basis check */
-    if ( fp < (1-eps)*f )
+    if ( fp + tol < (1-eps)*f )
     {
-      cout << "   condition not satisfied. i--" << endl;
+      //cout << "   condition not satisfied. i--" << endl;
 
       /* interchange b^i and b^{i+1} */
       vector<double> tempcopy = P.basis[i];
@@ -450,7 +453,7 @@ void reduce
     }
     else
     {
-      cout << "   condition satisfied. i++" << endl;
+      //cout << "   condition satisfied. i++" << endl;
       /* store useful values */
       f_stored[i] = f;
       f_stored[i+1] = fpp;
@@ -490,12 +493,19 @@ main(
 
   /* parameters */
   double eps = 1/4;
+  double tol = 1e-9;
 
   /* initialize polytope */
   Polytope P(A, b, lb, ub);
 
+  /* track reduction time */
+  auto start = chrono::high_resolution_clock::now();
+
   /* reduce basis */
-  reduce(eps, P);
+  reduce(P, eps, tol);
+
+  /* track reduction time */
+  auto end = chrono::high_resolution_clock::now();
 
   /* print basis */
   cout << endl;
@@ -514,12 +524,15 @@ main(
   {
     double Fii = P.distance(i, i);
     double Fiipp = P.distance(i, i+1);
-    if ((1.0-eps)*Fii > Fiipp)
+    if ((1.0-eps)*Fii > Fiipp + tol)
     {
       cout << "Condition " << Fiipp << " >= " << (1.0-eps)*Fii << " not satisfied " << endl;
       assert(0);
     }
     
   }
+
+  auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+  cout << "~ Total time: " << duration.count() << " milliseconds" << endl;
 
 }
