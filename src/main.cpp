@@ -106,6 +106,12 @@ class Polytope
     /* disable console output */
     model.set(GRB_IntParam_OutputFlag, 0);
 
+    /* set random seed */
+    model.set(GRB_IntParam_Seed, 72);
+
+    /* set tolerance */
+    model.set(GRB_DoubleParam_OptimalityTol, 1e-9);
+
     /* create problem variables */
     for( int j = 0; j < n; ++j )
     {
@@ -379,7 +385,7 @@ void reduce
   int i = 1;
   while (i < n)
   {
-    //cout << "*** i = " << i << endl;
+    cout << "*** i = " << i << " " << endl;
 
     /* get f = F_i(b^i) */
     f = (f_stored[i] >= 0.0) ? f_stored[i] : P.distance(i,i);
@@ -387,8 +393,8 @@ void reduce
     /* get fpp = F_{i+1}(b^{i+1}) */
     fpp = (fpp >= 0.0) ? fpp : P.distance(i+1, i+1, alphas);
 
-    // cout << "   F" << i << "(b" << i << ") = " << f << endl;
-    // cout << "   F" << i+1 << "(b" << i+1 << ") = " << fpp << endl;
+    cout << "   F" << i << "(b" << i << ") = " << f << endl;
+    cout << "   F" << i+1 << "(b" << i+1 << ") = " << fpp << endl;
 
     /* get mu and fp */  
     double alpha = alphas.back();  
@@ -418,8 +424,8 @@ void reduce
 
     }
 
-    //cout << "   alpha = " << alpha << endl;
-    //cout << "   mu = " << mu << endl;
+    cout << "   alpha = " << alpha << endl;
+    cout << "   mu = " << mu << endl;
 
     /* update b^{i+1} */
     for( int j = 0; j < n; ++j )
@@ -428,7 +434,7 @@ void reduce
     /* do basis check */
     if ( fp + tol < (1-eps)*f )
     {
-      //cout << "   condition not satisfied. i--" << endl;
+      cout << "   condition not satisfied. i--" << endl;
 
       /* interchange b^i and b^{i+1} */
       vector<double> tempcopy = P.basis[i];
@@ -453,7 +459,7 @@ void reduce
     }
     else
     {
-      //cout << "   condition satisfied. i++" << endl;
+      cout << "   condition satisfied. i++" << endl;
       /* store useful values */
       f_stored[i] = f;
       f_stored[i+1] = fpp;
@@ -469,7 +475,6 @@ void reduce
 }
 
 
-/** main function for queens example */
 int
 main(
      int argc,
@@ -492,8 +497,8 @@ main(
   int n = lb.size();
 
   /* parameters */
-  double eps = 1/4;
-  double tol = 1e-9;
+  double eps = 0.25;
+  double tol = 1e-6;
 
   /* initialize polytope */
   Polytope P(A, b, lb, ub);
@@ -526,7 +531,7 @@ main(
     double Fiipp = P.distance(i, i+1);
     if ((1.0-eps)*Fii > Fiipp + tol)
     {
-      cout << "Condition " << Fiipp << " >= " << (1.0-eps)*Fii << " not satisfied " << endl;
+      cout << "Condition " << i << " " << Fiipp << " >= " << (1.0-eps)*Fii << " not satisfied " << endl;
       assert(0);
     }
     
