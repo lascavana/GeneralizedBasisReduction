@@ -5,15 +5,7 @@ Implementation of the [lattice basis reduction](https://www.jstor.org/stable/368
 [Gurobi](https://www.gurobi.com/)
 
 ### Input
-The input file must be a ```.txt``` file in the following form:
-```shell
-n m
-A
-b
-lb
-ub
-```
-where n is the number of variables, m is the number of constraints, A is the constraint matrix (m x n), b is the right-hand side (m), and lb and ub are the vectors containing the variable lower and upper bounds, respectively, (n). The coefficients of lb and ub can be numbers, ```inf``` or ```-inf``` (see ```example.txt```).
+The input file must be an ```.lp``` or ```.mps``` file.
 
 ### Instructions
 This repository provides a shell script to compile and run the program. Modify the filename in this script (```run.sh```) and then run

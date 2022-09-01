@@ -91,88 +91,98 @@ void read_constraints
 class Polytope
 {
   GRBEnv env = GRBEnv();
-  GRBModel model = GRBModel(env);
+  GRBModel* model;
 
   vector<GRBVar> xvars;
   vector<GRBVar> yvars;
+  vector<char> types;
 
-  void initialize(const matrix &A, const vector<double> &b,
-                  const vector<double> &lb, const vector<double> &ub)
+  void initialize(const string filename)
   {
-    int m = b.size();
-    int n = lb.size();
-    assert(lb.size()==ub.size());
-
     /* disable console output */
-    model.set(GRB_IntParam_OutputFlag, 0);
+    env.set(GRB_IntParam_OutputFlag, 0);
 
-    /* set random seed */
-    model.set(GRB_IntParam_Seed, 72);
+    /* read problem */
+    model = new GRBModel(env, filename);
 
     /* set tolerance */
-    model.set(GRB_DoubleParam_OptimalityTol, 1e-9);
+    model->set(GRB_DoubleParam_OptimalityTol, 1e-9);
 
-    /* create problem variables */
-    for( int j = 0; j < n; ++j )
+    /* get problem size */
+    int nvars  = model->get(GRB_IntAttr_NumVars);
+    int nconss  = model->get(GRB_IntAttr_NumConstrs);
+
+    /* duplicate variables */
+    GRBVar* origvars = model->getVars();
+    for (int j=0; j<nvars; j++)
     {
-      GRBVar xvar, yvar;
-      string xname = "X" + to_string(j);
-      string yname = "Y" + to_string(j);
-      if (ub[j] < numeric_limits<double>::max())
+      double lb = origvars[j].get(GRB_DoubleAttr_LB);
+      double ub = origvars[j].get(GRB_DoubleAttr_UB);
+      char type = origvars[j].get(GRB_CharAttr_VType);
+
+      /* register the original variable type */
+      types.push_back(type);
+
+      /* change type to continuous */
+      if (type=='N') // semi-integer -> semi-continuos
       {
-        xvar = model.addVar(lb[j], ub[j], 0.0, GRB_CONTINUOUS, xname);
-        yvar = model.addVar(lb[j], ub[j], 0.0, GRB_CONTINUOUS, yname);
+        origvars[j].set(GRB_CharAttr_VType, 'S');
       }
       else
       {
-        xvar = model.addVar(lb[j], GRB_INFINITY, 0.0, GRB_CONTINUOUS, xname);
-        yvar = model.addVar(lb[j], GRB_INFINITY, 0.0, GRB_CONTINUOUS, yname);
+        origvars[j].set(GRB_CharAttr_VType, 'C');
       }
-      xvars.push_back( xvar );
-      yvars.push_back( yvar );
+
+      /* change objective function */
+      origvars[j].set(GRB_DoubleAttr_Obj, 0.0);
+
+      /* create new variable and save */
+      yvars.push_back( model->addVar(lb, ub, 0.0, 'C', "Y"+itos(j+1)) );
+      xvars.push_back( origvars[j] );
     }
 
-    /* create constraints Ax<=b */
-    for( int i = 0; i < m; ++i )
+    /* duplicate constraints */
+    GRBConstr* origconss = model->getConstrs();
+    for (int i=0; i<nconss; i++)
     {
       GRBLinExpr expr = 0;
-      for( int j = 0; j < n; ++j )
-        expr += A[i][j]*xvars[j];
-      string name = "CX_" + itos(i);
-      model.addConstr(expr, GRB_LESS_EQUAL, b[i], name);
+      for (int j=0; j<nvars; j++)
+      {
+        double coeff = model->getCoeff(origconss[i], origvars[j]);
+        if (coeff != 0.0) expr += coeff * yvars[j];
+      }
+      double rhs = origconss[i].get(GRB_DoubleAttr_RHS);
+      char sense = origconss[i].get(GRB_CharAttr_Sense);
+
+      model->addConstr(expr, sense, rhs, "CY_"+itos(i+1));
     }
 
-    /* create constraints Ay<=b */
-    for( int i = 0; i < m; ++i )
-    {
-      GRBLinExpr expr = 0;
-      for( int j = 0; j < n; ++j )
-        expr += A[i][j]*yvars[j];
-      string name = "CY_" + itos(i);
-      model.addConstr(expr, GRB_LESS_EQUAL, b[i], name);
-    }
-
+    /* delete arrays */
+    delete[] origvars;
+    delete[] origconss;
   }
 
 public:
-  int nvars;
-  matrix basis;
+  int nvars;    // number of variables (= dimension of the lattice)
+  int latrank;  // rank of the lattice
+  matrix basis; // lattice basis
 
-  Polytope(const matrix &A, const vector<double> &b,
-           const vector<double> &lb, const vector<double> &ub)
+  Polytope(const string filename)
   {
-    /* add basic variables and constraints */
-    initialize(A, b, lb, ub);
+    /* initialize polytope */
+    initialize(filename);
 
-    /* initialize basis to standard Zn basis */
-    nvars = lb.size();
-    vector<double> zeros(nvars);
+    /* initialize basis */
+    nvars = xvars.size();
+    vector<double> zeros(nvars, 0.0);
     for( int j = 0; j < nvars; ++j )
     {
+      /* add basis vector for each integer/binary variable */
+      if (types[j] == 'C' || types[j] == 'S') continue;
       basis.push_back(zeros);
       basis[j][j] = 1;
     }
-
+    latrank = basis.size();
   }
 
   ~Polytope()
@@ -191,7 +201,7 @@ public:
     GRBLinExpr obj = 0;
     for( int j = 0; j < n; ++j )
       obj+=w[j]*xvars[j] - w[j]*yvars[j];
-    model.setObjective(obj, GRB_MAXIMIZE);
+    model->setObjective(obj, GRB_MAXIMIZE);
 
     /* add new rows */
     vector<GRBConstr> added_conss;
@@ -201,23 +211,23 @@ public:
        for( int j = 0; j < n; ++j )
          expr += basis[i-1][j]*xvars[j] - basis[i-1][j]*yvars[j];
        string name = "N_" + itos(i);
-       GRBConstr cons = model.addConstr(expr, GRB_EQUAL, 0.0, name);
+       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
        added_conss.push_back(cons);
     }
 
     /* solve */
-    model.optimize();
+    model->optimize();
 
     /* get status */
-    int status = model.get(GRB_IntAttr_Status);
+    int status = model->get(GRB_IntAttr_Status);
     assert(status == 2); // solution should be optimal
 
     /* get solution */
-    double bestsol = model.get(GRB_DoubleAttr_ObjVal);
+    double bestsol = model->get(GRB_DoubleAttr_ObjVal);
 
     /* release transformed problem and added constraints */
     for(int i = 0; i < added_conss.size(); ++i)
-      model.remove(added_conss[i]);
+      model->remove(added_conss[i]);
     added_conss.clear();
 
     return max(0.0, bestsol);
@@ -234,7 +244,7 @@ public:
     GRBLinExpr obj = 0;
     for( int j = 0; j < n; ++j )
       obj+=w[j]*xvars[j] - w[j]*yvars[j];
-    model.setObjective(obj, GRB_MAXIMIZE);
+    model->setObjective(obj, GRB_MAXIMIZE);
 
     /* add new rows */
     vector<GRBConstr> added_conss;
@@ -244,19 +254,19 @@ public:
        for( int j = 0; j < n; ++j )
          expr += basis[i-1][j]*xvars[j] - basis[i-1][j]*yvars[j];
        string name = "N_" + itos(i);
-       GRBConstr cons = model.addConstr(expr, GRB_EQUAL, 0.0, name);
+       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
        added_conss.push_back(cons);
     }
 
     /* solve */
-    model.optimize();
+    model->optimize();
 
     /* get status */
-    int status = model.get(GRB_IntAttr_Status);
+    int status = model->get(GRB_IntAttr_Status);
     assert(status == 2); // solution should be optimal
 
     /* get solution */
-    double bestsol = model.get(GRB_DoubleAttr_ObjVal);
+    double bestsol = model->get(GRB_DoubleAttr_ObjVal);
 
     /* get dual variables for the added constraints */
     alpha.clear();
@@ -267,7 +277,7 @@ public:
 
     /* release transformed problem and added constraints */
     for(int i = 0; i < added_conss.size(); ++i)
-      model.remove(added_conss[i]);
+      model->remove(added_conss[i]);
     added_conss.clear();
 
     return max(0.0, bestsol);
@@ -282,7 +292,7 @@ public:
     GRBLinExpr obj;
     for( int j = 0; j < n; ++j )
       obj += basis[p-1][j]*xvars[j] - basis[p-1][j]*yvars[j];
-    model.setObjective(obj, GRB_MAXIMIZE);
+    model->setObjective(obj, GRB_MAXIMIZE);
 
     /* add new rows */
     vector<GRBConstr> added_conss;
@@ -292,23 +302,23 @@ public:
        for( int j = 0; j < n; ++j )
          expr += basis[i-1][j]*xvars[j] -basis[i-1][j]*yvars[j];
        string name = "N_" + itos(i);
-       GRBConstr cons = model.addConstr(expr, GRB_EQUAL, 0.0, name);
+       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
        added_conss.push_back(cons);
     }
 
     /* solve */
-    model.optimize();
+    model->optimize();
 
     /* get status */
-    int status = model.get(GRB_IntAttr_Status);
+    int status = model->get(GRB_IntAttr_Status);
     assert(status == 2); // solution should be optimal
 
     /* get solution */
-    double bestsol = model.get(GRB_DoubleAttr_ObjVal);
+    double bestsol = model->get(GRB_DoubleAttr_ObjVal);
 
     /* release transformed problem and added constraints */
     for(int i = 0; i < added_conss.size(); ++i)
-      model.remove(added_conss[i]);
+      model->remove(added_conss[i]);
     added_conss.clear();
 
     return max(0.0, bestsol);
@@ -324,7 +334,7 @@ public:
     GRBLinExpr obj;
     for( int j = 0; j < n; ++j )
       obj += basis[p-1][j]*xvars[j] - basis[p-1][j]*yvars[j];
-    model.setObjective(obj, GRB_MAXIMIZE);
+    model->setObjective(obj, GRB_MAXIMIZE);
 
     /* add new rows */
     vector<GRBConstr> added_conss;
@@ -334,19 +344,19 @@ public:
        for( int j = 0; j < n; ++j )
          expr += basis[i-1][j]*xvars[j] -basis[i-1][j]*yvars[j];
        string name = "N_" + itos(i);
-       GRBConstr cons = model.addConstr(expr, GRB_EQUAL, 0.0, name);
+       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
        added_conss.push_back(cons);
     }
 
     /* solve */
-    model.optimize();
+    model->optimize();
 
     /* get status */
-    int status = model.get(GRB_IntAttr_Status);
+    int status = model->get(GRB_IntAttr_Status);
     assert(status == 2); // solution should be optimal
 
     /* get solution */
-    double bestsol = model.get(GRB_DoubleAttr_ObjVal);
+    double bestsol = model->get(GRB_DoubleAttr_ObjVal);
 
     /* get dual variables for the added constraints */
     alpha.clear();
@@ -357,7 +367,7 @@ public:
 
     /* release transformed problem and added constraints */
     for(int i = 0; i < added_conss.size(); ++i)
-      model.remove(added_conss[i]);
+      model->remove(added_conss[i]);
     added_conss.clear();
 
     return max(0.0, bestsol);
@@ -374,16 +384,17 @@ void reduce
 )
 {
   int n = P.nvars;
+  int latrank = P.latrank;
 
   double mu;
   double f, fp;
   vector<double> alphas;
 
   double fpp = -1;
-  vector<double> f_stored(n+1, -1);
+  vector<double> f_stored(latrank+1, -1);
 
   int i = 1;
-  while (i < n)
+  while (i < latrank)
   {
     cout << "*** i = " << i << " " << endl;
 
@@ -487,21 +498,13 @@ main(
     return 0;
   }
 
-  /* get problem data */
-  matrix A;
-  vector<double> b;
-  vector<double> lb;
-  vector<double> ub;
-  read_constraints(argv[1], A, b, lb, ub);
-  int m = A.size();
-  int n = lb.size();
-
   /* parameters */
   double eps = 0.25;
   double tol = 1e-6;
 
   /* initialize polytope */
-  Polytope P(A, b, lb, ub);
+  string filename(argv[1]);
+  Polytope P(filename);
 
   /* track reduction time */
   auto start = chrono::high_resolution_clock::now();
@@ -515,17 +518,17 @@ main(
   /* print basis */
   cout << endl;
   cout << "Reduction finished. Reduced basis is: " << endl;
-  for( int i = 0; i < n; ++i )
+  for( int i = 0; i < P.latrank; ++i )
   {
     cout << "b" << i+1 << " = [";
-    for( int j = 0; j < n; ++j )
+    for( int j = 0; j < P.nvars; ++j )
       cout << P.basis[i][j] << " ";
     cout << "]" << endl;
   }
 
   /* check basis */
   cout << endl;
-  for( int i = 1; i < n; ++i )
+  for( int i = 1; i < P.latrank; ++i )
   {
     double Fii = P.distance(i, i);
     double Fiipp = P.distance(i, i+1);

@@ -3,4 +3,4 @@ mkdir build
 cmake -H. -Bbuild
 cmake --build build
 
-./build/ls_reduction example.txt
+./build/ls_reduction example.lp
