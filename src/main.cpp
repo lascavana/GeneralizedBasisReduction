@@ -88,7 +88,7 @@ void read_constraints
   else cerr << "Unable to open file" << endl;
 }
 
-class Polytope
+class Body
 {
   GRBEnv env = GRBEnv();
   GRBModel* model;
@@ -167,9 +167,9 @@ public:
   int latrank;  // rank of the lattice
   matrix basis; // lattice basis
 
-  Polytope(const string filename)
+  Body(const string filename)
   {
-    /* initialize polytope */
+    /* initialize body */
     initialize(filename);
 
     /* initialize basis */
@@ -185,7 +185,7 @@ public:
     latrank = basis.size();
   }
 
-  ~Polytope()
+  ~Body()
   {
     xvars.clear();
     yvars.clear();
@@ -378,7 +378,7 @@ public:
 
 void reduce
 (
-  Polytope &P,
+  Body &P,
   double eps,
   double tol
 )
@@ -502,9 +502,9 @@ main(
   double eps = 0.25;
   double tol = 1e-6;
 
-  /* initialize polytope */
+  /* initialize body */
   string filename(argv[1]);
-  Polytope P(filename);
+  Body P(filename);
 
   /* track reduction time */
   auto start = chrono::high_resolution_clock::now();
