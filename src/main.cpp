@@ -180,7 +180,7 @@ public:
       /* add basis vector for each integer/binary variable */
       if (types[j] == 'C' || types[j] == 'S') continue;
       basis.push_back(zeros);
-      basis[j][j] = 1;
+      basis[basis.size()-1][j] = 1;
     }
     latrank = basis.size();
   }
