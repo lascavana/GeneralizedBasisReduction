@@ -28,66 +28,6 @@ bool is_integer(double x)
   }
 }
 
-void read_constraints
-(
-  const char *filename,
-  matrix &A,
-  vector<double> &b,
-  vector<double> &lb,
-  vector<double> &ub
-)
-{
-  int n, m; double coeff; string str;
-
-  /* open file for reading */
-  ifstream input_file(filename, ifstream::in);
-
-  /* read data */
-  if (input_file.is_open())
-  {
-    input_file >> n >> m;
-
-    /* read A matrix */
-    for (int i = 0; i < m; i++)
-  	{
-        vector<double> row(n);
-  	    for (int j = 0; j < n; j++)
-          input_file >> row[j];
-        A.push_back( row );
-    }
-
-    /* read rhs vector b */
-    for (int i = 0; i < m; i++)
-    {
-      input_file >> coeff;
-      b.push_back( coeff );
-    }
-
-    /* read variable lower bounds */
-    for (int j = 0; j < n; j++)
-    {
-      input_file >> str;
-      if (str == "-inf")
-        lb.push_back( -numeric_limits<double>::max() );
-      else
-        lb.push_back( stod(str) );
-    }
-
-    /* read variable upper bounds */
-    for (int j = 0; j < n; j++)
-    {
-      input_file >> str;
-      if (str == "inf")
-        ub.push_back( numeric_limits<double>::max() );
-      else
-        ub.push_back( stod(str) );
-    }
-
-    input_file.close();
-  }
-  else cerr << "Unable to open file" << endl;
-}
-
 class Body
 {
   GRBEnv env = GRBEnv();
