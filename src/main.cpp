@@ -14,6 +14,15 @@
 using namespace std;
 using matrix = vector<vector<double>>;
 
+struct element
+{
+  int idx;
+  double value;
+};
+
+using SparseVec = vector<element>;
+using Basis = vector<SparseVec>;
+
 string itos(int i) {stringstream s; s << i; return s.str(); }
 
 bool is_integer(double x)
@@ -35,7 +44,8 @@ class Body
 
   vector<GRBVar> xvars;
   vector<GRBVar> yvars;
-  vector<char> types;
+  vector<char> vartypes;
+  vector<string> varnames;
 
   void initialize(const string filename)
   {
@@ -59,9 +69,13 @@ class Body
       double lb = origvars[j].get(GRB_DoubleAttr_LB);
       double ub = origvars[j].get(GRB_DoubleAttr_UB);
       char type = origvars[j].get(GRB_CharAttr_VType);
+      string name = origvars[j].get(GRB_StringAttr_VarName);
 
       /* register the original variable type */
-      types.push_back(type);
+      vartypes.push_back(type);
+
+      /* register the original variable name */
+      varnames.push_back(name);
 
       /* change type to continuous */
       if (type=='N') // semi-integer -> semi-continuos
@@ -105,7 +119,7 @@ class Body
 public:
   int nvars;    // number of variables (= dimension of the lattice)
   int latrank;  // rank of the lattice
-  matrix basis; // lattice basis
+  Basis basis; // lattice basis
 
   Body(const string filename)
   {
@@ -118,9 +132,9 @@ public:
     for( int j = 0; j < nvars; ++j )
     {
       /* add basis vector for each integer/binary variable */
-      if (types[j] == 'C' || types[j] == 'S') continue;
-      basis.push_back(zeros);
-      basis[basis.size()-1][j] = 1;
+      if (vartypes[j] == 'C' || vartypes[j] == 'S') continue;
+      SparseVec newvec(1, {j, 1.0});
+      basis.push_back(newvec);
     }
     latrank = basis.size();
   }
@@ -148,8 +162,9 @@ public:
     for( int i = 1; i < k; ++i )
     {
        GRBLinExpr expr;
-       for( int j = 0; j < n; ++j )
-         expr += basis[i-1][j]*xvars[j] - basis[i-1][j]*yvars[j];
+       SparseVec bi = basis[i-1];
+       for( element e: bi )
+         expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
        string name = "N_" + itos(i);
        GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
        added_conss.push_back(cons);
@@ -191,8 +206,9 @@ public:
     for( int i = 1; i < k; ++i )
     {
        GRBLinExpr expr;
-       for( int j = 0; j < n; ++j )
-         expr += basis[i-1][j]*xvars[j] - basis[i-1][j]*yvars[j];
+       SparseVec bi = basis[i-1];
+       for( element e: bi )
+         expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
        string name = "N_" + itos(i);
        GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
        added_conss.push_back(cons);
@@ -230,20 +246,22 @@ public:
 
     /* change objective function */
     GRBLinExpr obj;
-    for( int j = 0; j < n; ++j )
-      obj += basis[p-1][j]*xvars[j] - basis[p-1][j]*yvars[j];
+    SparseVec bp = basis[p-1];
+    for( element e: bp )
+      obj += e.value * xvars[e.idx] - e.value * yvars[e.idx];
     model->setObjective(obj, GRB_MAXIMIZE);
 
     /* add new rows */
     vector<GRBConstr> added_conss;
     for( int i = 1; i < k; ++i )
     {
-       GRBLinExpr expr;
-       for( int j = 0; j < n; ++j )
-         expr += basis[i-1][j]*xvars[j] -basis[i-1][j]*yvars[j];
-       string name = "N_" + itos(i);
-       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
-       added_conss.push_back(cons);
+        GRBLinExpr expr;
+        SparseVec bi = basis[i-1];
+        for( element e: bi )
+          expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
+        string name = "N_" + itos(i);
+        GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
+        added_conss.push_back(cons);
     }
 
     /* solve */
@@ -272,20 +290,22 @@ public:
 
     /* change objective function */
     GRBLinExpr obj;
-    for( int j = 0; j < n; ++j )
-      obj += basis[p-1][j]*xvars[j] - basis[p-1][j]*yvars[j];
+    SparseVec bp = basis[p-1];
+    for( element e: bp )
+      obj += e.value * xvars[e.idx] - e.value * yvars[e.idx];
     model->setObjective(obj, GRB_MAXIMIZE);
 
     /* add new rows */
     vector<GRBConstr> added_conss;
     for( int i = 1; i < k; ++i )
     {
-       GRBLinExpr expr;
-       for( int j = 0; j < n; ++j )
-         expr += basis[i-1][j]*xvars[j] -basis[i-1][j]*yvars[j];
-       string name = "N_" + itos(i);
-       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
-       added_conss.push_back(cons);
+        GRBLinExpr expr;
+        SparseVec bi = basis[i-1];
+        for( element e: bi )
+          expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
+        string name = "N_" + itos(i);
+        GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
+        added_conss.push_back(cons);
     }
 
     /* solve */
@@ -315,6 +335,22 @@ public:
 
 };
 
+void print_basis
+(
+  Body &P
+)
+{
+  for( int i = 0; i < P.latrank; ++i )
+  {
+    vector<double> bi(P.nvars, 0.0);
+    for (element e: P.basis[i])
+      bi[e.idx] =  e.value;
+    cout << "b" << i+1 << " = [";
+    for( int j = 0; j < P.nvars; ++j )
+      cout << bi[j] << " ";
+    cout << "]" << endl;
+  }
+}
 
 void reduce
 (
@@ -355,13 +391,22 @@ void reduce
     }
     else
     {
-      vector<double> vec1(n), vec2(n);
-      vector<double> alphas1, alphas2;
-      for( int j = 0; j < n; ++j )
+      /* create vectors 
+        vec1 = b^{i+1}+ ceil(alpha)b^i
+        vec2 = b^{i+1}+ floor(alpha)b^i */
+      vector<double> vec1(n, 0.0), vec2(n, 0.0);
+      for (element e: P.basis[i])
       {
-        vec1[j] = P.basis[i][j] + ceil(alpha)*P.basis[i-1][j];
-        vec2[j] = P.basis[i][j] + floor(alpha)*P.basis[i-1][j];
+        vec1[e.idx] += e.value;
+        vec2[e.idx] += e.value;
       }
+      for (element e: P.basis[i-1])
+      {
+        vec1[e.idx] += ceil(alpha)*e.value;
+        vec2[e.idx] += floor(alpha)*e.value;
+      }
+
+      vector<double> alphas1, alphas2;
       double z_ceil = P.distance(i, vec1, alphas1);
       double z_floor = P.distance(i, vec2, alphas2);
       if (z_ceil < z_floor)
@@ -379,8 +424,25 @@ void reduce
     cout << "   mu = " << mu << endl;
 
     /* update b^{i+1} */
-    for( int j = 0; j < n; ++j )
-      P.basis[i][j] = P.basis[i][j] + mu*P.basis[i-1][j];
+    if (mu != 0)
+    {
+      // b^{i+1} \gets  b^{i+1} + mu * b^{i}
+      for( element e: P.basis[i-1] )
+      {
+        bool present = false;
+        for( int j=0; j<P.basis[i].size(); j++ )
+        {
+          if (P.basis[i][j].idx == e.idx)
+          {
+            P.basis[i][j].value += mu * e.value;
+            present = true;
+          }
+        }
+
+        if (not present)
+          P.basis[i].push_back( {e.idx, mu * e.value} );
+      }
+    }
 
     /* do basis check */
     if ( fp + tol < (1-eps)*f )
@@ -388,12 +450,9 @@ void reduce
       cout << "   condition not satisfied. i--" << endl;
 
       /* interchange b^i and b^{i+1} */
-      vector<double> tempcopy = P.basis[i];
-      for( int j = 0; j < n; ++j )
-      {
-        P.basis[i][j] = P.basis[i-1][j];
-        P.basis[i-1][j] = tempcopy[j];
-      }
+      SparseVec tempcopy = P.basis[i];
+      P.basis[i] = P.basis[i-1];
+      P.basis[i-1] = tempcopy;
 
       /* clear obsolete saved values */
       f_stored[i] = -1;
@@ -458,13 +517,7 @@ main(
   /* print basis */
   cout << endl;
   cout << "Reduction finished. Reduced basis is: " << endl;
-  for( int i = 0; i < P.latrank; ++i )
-  {
-    cout << "b" << i+1 << " = [";
-    for( int j = 0; j < P.nvars; ++j )
-      cout << P.basis[i][j] << " ";
-    cout << "]" << endl;
-  }
+  print_basis(P);
 
   /* check basis */
   cout << endl;
