@@ -333,6 +333,31 @@ public:
     return max(0.0, bestsol);
   }
 
+  void print_best(unsigned long k)
+  /* prints best k branching directions into file */
+  {
+    ofstream outputfile;
+    outputfile.open("hyperplanes.txt");
+
+    k = std::min(k, basis.size());
+
+    for (int j=0; j<k; j++)
+    {
+      for (element e: basis[j])
+      {
+        string name = varnames[e.idx];
+        double value = e.value;
+        if (value > 0.0)
+          outputfile << "+" << value << " " << name << " ";
+        if (value < 0.0)
+          outputfile << value << " " << name << " ";
+      }
+      outputfile << "\n";
+    }
+
+    outputfile.close();
+  }
+
 };
 
 void print_basis
@@ -505,13 +530,13 @@ main(
   string filename(argv[1]);
   Body P(filename);
 
-  /* track reduction time */
+  /* track reduction time: start clock */
   auto start = chrono::high_resolution_clock::now();
 
   /* reduce basis */
   reduce(P, eps, tol);
 
-  /* track reduction time */
+  /* track reduction time: stop clock */
   auto end = chrono::high_resolution_clock::now();
 
   /* print basis */
@@ -532,6 +557,9 @@ main(
     }
     
   }
+
+  /* print hyperplane */
+  P.print_best(2);
 
   auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
   cout << "~ Total time: " << duration.count() << " milliseconds" << endl;
