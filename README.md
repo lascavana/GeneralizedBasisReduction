@@ -7,6 +7,9 @@ Implementation of the [generalized lattice basis reduction](https://www.jstor.or
 ### Input
 The input file must be an ```.lp``` or ```.mps``` file.
 
+### Output
+A basis of $\mathbb{Z}^n$ that is reduced for the given polytope.
+
 ### Instructions
 This repository provides a shell script to compile and run the program. Modify the filename in this script (```run.sh```) and then run
 ```
