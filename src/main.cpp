@@ -148,44 +148,8 @@ public:
   double distance(int k, const vector<double> &w)
   /* calculates F_{k}(w) for k \in {1,...,n}. */
   {
-    int n = xvars.size();
-    assert(w.size() == n);
-
-    /* change objective function */
-    GRBLinExpr obj = 0;
-    for( int j = 0; j < n; ++j )
-      obj+=w[j]*xvars[j] - w[j]*yvars[j];
-    model->setObjective(obj, GRB_MAXIMIZE);
-
-    /* add new rows */
-    vector<GRBConstr> added_conss;
-    for( int i = 1; i < k; ++i )
-    {
-       GRBLinExpr expr;
-       SparseVec bi = basis[i-1];
-       for( element e: bi )
-         expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
-       string name = "N_" + itos(i);
-       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
-       added_conss.push_back(cons);
-    }
-
-    /* solve */
-    model->optimize();
-
-    /* get status */
-    int status = model->get(GRB_IntAttr_Status);
-    assert(status == 2); // solution should be optimal
-
-    /* get solution */
-    double bestsol = model->get(GRB_DoubleAttr_ObjVal);
-
-    /* release transformed problem and added constraints */
-    for(int i = 0; i < added_conss.size(); ++i)
-      model->remove(added_conss[i]);
-    added_conss.clear();
-
-    return max(0.0, bestsol);
+    vector<double> dummy;
+    return distance(k, w, dummy);
   }
 
   double distance(int k, const vector<double> &w, vector<double> &alpha)
@@ -242,44 +206,8 @@ public:
   double distance(int k, int p)
   /* calculates F_{k}(b^p) for k,p \in {1,...,n}. */
   {
-    int n = xvars.size();
-
-    /* change objective function */
-    GRBLinExpr obj;
-    SparseVec bp = basis[p-1];
-    for( element e: bp )
-      obj += e.value * xvars[e.idx] - e.value * yvars[e.idx];
-    model->setObjective(obj, GRB_MAXIMIZE);
-
-    /* add new rows */
-    vector<GRBConstr> added_conss;
-    for( int i = 1; i < k; ++i )
-    {
-        GRBLinExpr expr;
-        SparseVec bi = basis[i-1];
-        for( element e: bi )
-          expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
-        string name = "N_" + itos(i);
-        GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
-        added_conss.push_back(cons);
-    }
-
-    /* solve */
-    model->optimize();
-
-    /* get status */
-    int status = model->get(GRB_IntAttr_Status);
-    assert(status == 2); // solution should be optimal
-
-    /* get solution */
-    double bestsol = model->get(GRB_DoubleAttr_ObjVal);
-
-    /* release transformed problem and added constraints */
-    for(int i = 0; i < added_conss.size(); ++i)
-      model->remove(added_conss[i]);
-    added_conss.clear();
-
-    return max(0.0, bestsol);
+    vector<double> dummy;
+    return distance(k, p, dummy);
   }
 
   double distance(int k, int p, vector<double> &alpha)
