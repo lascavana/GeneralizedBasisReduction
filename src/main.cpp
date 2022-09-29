@@ -47,6 +47,8 @@ class Body
   vector<char> vartypes;
   vector<string> varnames;
 
+  vector<GRBConstr> added_conss;
+
   void initialize(const string filename)
   {
     /* disable console output */
@@ -165,17 +167,32 @@ public:
       obj+=w[j]*xvars[j] - w[j]*yvars[j];
     model->setObjective(obj, GRB_MAXIMIZE);
 
-    /* add new rows */
-    vector<GRBConstr> added_conss;
-    for( int i = 1; i < k; ++i )
+    /* calculate the number of rows that need to be added or removed */
+    int diff = k-1 - added_conss.size(); // #needed - #present
+
+    /* change the number of rows */
+    if (diff > 0) 
     {
-       GRBLinExpr expr;
-       SparseVec bi = basis[i-1];
-       for( element e: bi )
-         expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
-       string name = "N_" + itos(i);
-       GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
-       added_conss.push_back(cons);
+      /* add rows */
+      for( int i = 0; i < diff; ++i )
+      {
+        GRBLinExpr expr;
+        SparseVec bi = basis[k-1-diff+i];
+        for( element e: bi )
+          expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
+        string name = "N_" + itos(k-2-i);
+        GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
+        added_conss.push_back(cons);
+      }
+    }
+    else if (diff < 0)
+    {
+      /* remove rows */
+      for( int i = 0; i < -diff; ++i )
+      {
+        model->remove(added_conss.back());
+        added_conss.pop_back();
+      }
     }
 
     /* solve */
@@ -194,11 +211,6 @@ public:
     {
       alpha.push_back( -added_conss[i].get(GRB_DoubleAttr_Pi) );
     }
-
-    /* release transformed problem and added constraints */
-    for(int i = 0; i < added_conss.size(); ++i)
-      model->remove(added_conss[i]);
-    added_conss.clear();
 
     return max(0.0, bestsol);
   }
@@ -223,17 +235,32 @@ public:
       obj += e.value * xvars[e.idx] - e.value * yvars[e.idx];
     model->setObjective(obj, GRB_MAXIMIZE);
 
-    /* add new rows */
-    vector<GRBConstr> added_conss;
-    for( int i = 1; i < k; ++i )
+    /* calculate the number of rows that need to be added or removed */
+    int diff = k-1 - added_conss.size(); // #needed - #present
+
+    /* change the number of rows */
+    if (diff > 0) 
     {
+      /* add rows */
+      for( int i = 0; i < diff; ++i )
+      {
         GRBLinExpr expr;
-        SparseVec bi = basis[i-1];
+        SparseVec bi = basis[k-1-diff+i];
         for( element e: bi )
           expr += e.value * xvars[e.idx] - e.value * yvars[e.idx];
-        string name = "N_" + itos(i);
+        string name = "N_" + itos(k-2-i);
         GRBConstr cons = model->addConstr(expr, GRB_EQUAL, 0.0, name);
         added_conss.push_back(cons);
+      }
+    }
+    else if (diff < 0)
+    {
+      /* remove rows */
+      for( int i = 0; i < -diff; ++i )
+      {
+        model->remove(added_conss.back());
+        added_conss.pop_back();
+      }
     }
 
     /* solve */
@@ -253,12 +280,19 @@ public:
       alpha.push_back( -added_conss[i].get(GRB_DoubleAttr_Pi) );
     }
 
-    /* release transformed problem and added constraints */
-    for(int i = 0; i < added_conss.size(); ++i)
-      model->remove(added_conss[i]);
-    added_conss.clear();
-
     return max(0.0, bestsol);
+  }
+
+  void remove_old_constraints(int k)
+  /* when i=k and we are going backwards, make sure that added_conss.size() = k-1 */
+  {
+    int diff = added_conss.size() - (k-1); 
+    diff = max(0, diff);
+    for (int i=0; i<diff; i++)
+    {
+      model->remove(added_conss.back());
+      added_conss.pop_back();
+    }
   }
 
   void print_best(unsigned long k)
@@ -416,6 +450,9 @@ void reduce
       alphas.resize(i-1);
       if( i == 1 ) fpp = -1; // reusing not valid at i=1
 
+      /* remove obsolete constraints from body */
+      P.remove_old_constraints(i);
+
       /* go back a step */
       i = max(1,i-1);
 
@@ -435,6 +472,7 @@ void reduce
 
   }
 
+  P.remove_old_constraints(1); // remove all constraints
 }
 
 
